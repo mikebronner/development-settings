@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mikebronner/development-settings
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
           path: _developer-settings
 
       - name: Setup PHP
