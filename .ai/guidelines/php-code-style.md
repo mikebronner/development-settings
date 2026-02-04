@@ -113,9 +113,6 @@ This project differs from PSR-12. Count from BASE (statement start):
 // ✅ Correct
 if (! $name) { }
 $isInvalid = ! $isValid;
-
-// ❌ Wrong
-if (!$name) { }
 ```
 
 ---
@@ -141,9 +138,6 @@ if (!$name) { }
 use App\Models\User;
 $model = User::class;
 Route::get('/users', [UserController::class, 'index']);
-
-// ❌ Wrong
-$model = 'App\Models\User';
 ```
 
 ---
@@ -156,7 +150,4 @@ $model = 'App\Models\User';
 // ✅ Correct
 protected function processData(): array { }
 protected string $status;
-
-// ❌ Wrong (unless truly needed)
-private function processData(): array { }
 ```

@@ -7,19 +7,8 @@ Use Pest with expressive syntax over PHPUnit assertions.
 ## Running Tests
 
 ```bash
-# Check if Sail is running
-docker ps | grep sail
-
-# With Sail
-./vendor/bin/sail test
-./vendor/bin/sail test --filter=TestName
-
-# Without Sail
-php artisan test
-php artisan test --filter=TestName
-
-# Parallel (default for performance)
-php artisan test --parallel
+php artisan test --compact
+php artisan test --compact --filter=TestName
 ```
 
 ## Test Types
