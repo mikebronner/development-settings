@@ -18,8 +18,8 @@ jobs:
       - name: Checkout developer-settings
         uses: actions/checkout@v4
         with:
-          repository: insight-llc/developer-settings
-          token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
+          repository: mikebronner/development-settings
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: _developer-settings
 
       - name: Setup PHP
