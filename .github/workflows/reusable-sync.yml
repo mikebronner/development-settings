@@ -12,8 +12,6 @@ jobs:
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
       - name: Checkout developer-settings
         uses: actions/checkout@v4
@@ -42,38 +40,39 @@ jobs:
           echo "$PATHS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Detect changed tracked files
+      - name: Copy tracked files to package
+        run: |
+          TRACKED_PATHS="${{ steps.config.outputs.paths }}"
+
+          while IFS= read -r tracked; do
+            [ -z "$tracked" ] && continue
+            if [ -d "$tracked" ]; then
+              find "$tracked" -type f | while read -r file; do
+                target="_developer-settings/$file"
+                mkdir -p "$(dirname "$target")"
+                cp "$file" "$target"
+              done
+            elif [ -f "$tracked" ]; then
+              target="_developer-settings/$tracked"
+              mkdir -p "$(dirname "$target")"
+              cp "$tracked" "$target"
+            fi
+          done <<< "$TRACKED_PATHS"
+
+      - name: Detect changes
         id: changes
         run: |
-          ALL_CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          TRACKED_PATHS="${{ steps.config.outputs.paths }}"
-          CHANGED=""
+          cd _developer-settings
+          MODIFIED=$(git diff --name-only)
+          NEW=$(git ls-files --others --exclude-standard)
+          ALL_CHANGED=$(echo -e "$MODIFIED\n$NEW" | sort -u | grep -v '^$' || true)
 
-          for file in $ALL_CHANGED; do
-            while IFS= read -r tracked; do
-              [ -z "$tracked" ] && continue
-              if [[ "$file" == "$tracked" ]] || [[ "$file" == "$tracked"/* ]]; then
-                CHANGED="$CHANGED $file"
-                break
-              fi
-            done <<< "$TRACKED_PATHS"
-          done
-
-          CHANGED=$(echo "$CHANGED" | xargs)
-          echo "files=$CHANGED" >> $GITHUB_OUTPUT
-
-          if [ -n "$CHANGED" ]; then
+          if [ -n "$ALL_CHANGED" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$ALL_CHANGED" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
-
-      - name: Copy changed files to package
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          for file in ${{ steps.changes.outputs.files }}; do
-            target="_developer-settings/$file"
-            mkdir -p "$(dirname "$target")"
-            cp "$file" "$target"
-          done
 
       - name: Create Pull Request
         if: steps.changes.outputs.has_changes == 'true'
