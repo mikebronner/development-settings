@@ -1,0 +1,104 @@
+name: Reusable Sync Workflow
+
+on:
+  workflow_call:
+    secrets:
+      DEVELOPER_SETTINGS_TOKEN:
+        required: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Checkout developer-settings
+        uses: actions/checkout@v4
+        with:
+          repository: insight-llc/developer-settings
+          token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
+          path: _developer-settings
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Extract tracked paths from config
+        id: config
+        run: |
+          PATHS=$(php -r "
+            \$config = require '_developer-settings/config/developer-settings.php';
+            \$paths = array_merge(
+              \$config['paths']['directories'] ?? [],
+              \$config['paths']['files'] ?? []
+            );
+            echo implode(PHP_EOL, \$paths);
+          ")
+          echo "paths<<EOF" >> $GITHUB_OUTPUT
+          echo "$PATHS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Detect changed tracked files
+        id: changes
+        run: |
+          ALL_CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          TRACKED_PATHS="${{ steps.config.outputs.paths }}"
+          CHANGED=""
+
+          for file in $ALL_CHANGED; do
+            while IFS= read -r tracked; do
+              [ -z "$tracked" ] && continue
+              if [[ "$file" == "$tracked" ]] || [[ "$file" == "$tracked"/* ]]; then
+                CHANGED="$CHANGED $file"
+                break
+              fi
+            done <<< "$TRACKED_PATHS"
+          done
+
+          CHANGED=$(echo "$CHANGED" | xargs)
+          echo "files=$CHANGED" >> $GITHUB_OUTPUT
+
+          if [ -n "$CHANGED" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Copy changed files to package
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          for file in ${{ steps.changes.outputs.files }}; do
+            target="_developer-settings/$file"
+            mkdir -p "$(dirname "$target")"
+            cp "$file" "$target"
+          done
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: _developer-settings
+          token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
+          branch: sync/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          delete-branch: true
+          title: "sync: Update from ${{ github.repository }}"
+          body: |
+            ## Automated Sync
+
+            Changes to shared config files detected in `${{ github.repository }}`.
+
+            **Changed files:**
+            ```
+            ${{ steps.changes.outputs.files }}
+            ```
+
+            **Source commit:** ${{ github.event.head_commit.url }}
+
+            ---
+            After merging, tag a new release to distribute changes.
+          commit-message: "sync: Update from ${{ github.repository }}"
+          labels: |
+            automated
+            sync

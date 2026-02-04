@@ -1,0 +1,38 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "keywords": ["laravel", "developer"],
+    "name": "mikebronner/development-settings",
+    "description": "Shared settings for Laravel development.",
+    "type": "composer-plugin",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "Mike Bronner",
+            "email": "mike.bronner@icloud.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "composer-plugin-api": "^2.0"
+    },
+    "require-dev": {
+        "laravel/boost": "^2.0",
+        "laravel/pint": "^1.24",
+        "nunomaduro/collision": "^8.6",
+        "slevomat/coding-standard": "^8.24"
+    },
+    "autoload": {
+        "psr-4": {
+            "MikeBronner\\DevelopmentSettings\\": "src/"
+        }
+    },
+    "extra": {
+        "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    }
+}

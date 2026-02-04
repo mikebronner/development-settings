@@ -1,0 +1,47 @@
+{
+    ".ai/guidelines/agent-behavior.md": [
+        "b4b7bbe28e5c6114f966a3806a7b973f"
+    ],
+    ".ai/guidelines/code-style.md": [
+        "a7d984ef9ce264cd92cdab8bac599d9f"
+    ],
+    ".ai/guidelines/commit-conventions.md": [
+        "44a41a59691bf320e48e6457a04ce424"
+    ],
+    ".ai/guidelines/database-conventions.md": [
+        "b778763c57b484cd9dc2c97e97edc9f3"
+    ],
+    ".ai/guidelines/php-conventions.md": [
+        "2f02523467a4085af1079a83d4f4bcf0"
+    ],
+    ".ai/guidelines/soul.md": [
+        "d5b29fd47ddc02b2106de84996de6aeb"
+    ],
+    ".ai/guidelines/testing-conventions.md": [
+        "705707de57f24c24164bf826c4858cfa"
+    ],
+    ".ai/skills/php-code-style/SKILL.md": [
+        "7a24101bb4c9add88fa75ed11aaeb557"
+    ],
+    ".github/workflows/sync-developer-settings.yml": [
+        "3ed155007d03bc3370ac7471f527e794"
+    ],
+    ".php-codesniffer/mikebronner/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
+        "927b4c76c15b2280ae54fc540f11c8ac"
+    ],
+    ".php-codesniffer/mikebronner/ruleset.xml": [
+        "197d2a3197508ea8e581f9c36cd21bda"
+    ],
+    ".pre-commit-config.yaml": [
+        "00d6328ed40ec33f9a49c4ccc38407ad"
+    ],
+    "phpcs.xml": [
+        "992e3c5d1d7863fcf21d73374254a46a"
+    ],
+    "phpmd.xml": [
+        "a2d80f6b94db829aa45205ea0f42ce5e"
+    ],
+    "pint.json": [
+        "9ab087085e2953193527c3466e4cda47"
+    ]
+}

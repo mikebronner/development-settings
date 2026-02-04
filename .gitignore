@@ -1,0 +1,122 @@
+# ----------------------------
+# Laravel
+# ----------------------------
+*.log
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.phpunit.cache
+/auth.json
+/coverage-report
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+Homestead.json
+Homestead.yaml
+Thumbs.db
+auth.json
+npm-debug.log
+yarn-error.log
+
+# ----------------------------
+# Dev / Sail
+# ----------------------------
+.npm/
+.composer/
+.gitconfig
+.ash_history
+.devcontainer/*
+supervisord.log
+Docker/dynamodb/*
+
+# ----------------------------
+# Decision Cloud
+# ----------------------------
+/configuration/*.sql
+/configuration/application.failsafe.ini
+/configuration/application.ini
+/db/schemasync/*.sql
+/db/schemasync/schemasync.log
+/files/*
+!/files/.gitignore
+/logs/*
+/tmp/*
+/volume
+gitignore
+*.tmp
+.DS_Store
+.php_cs.cache
+statuspage_server.json
+statuspage_status.json
+
+# ----------------------------
+# Laravel/Decision Cloud
+# ----------------------------
+/public/img/avatars/*
+!/public/img/avatars/default.jpg
+/public/js/tinymce.assets/plugins/moxiemanager/data/
+/public/js/tinymce.assets/plugins/responsivefilemanager-master/source/*
+/public/js/tinymce.assets/plugins/responsivefilemanager-master/thumbs/*script/dump_elasticsearch/output/*
+agilefish_test
+.bash_history
+.eslintrc.js
+.php-cs-fixer.cache
+clover.xml
+lcov.info
+phpunit.xml
+*.terraform
+*.terraform.loc*
+
+# ----------------------------
+# Terraform
+# ----------------------------
+/infrastructure/terraform/**/plan
+
+# ----------------------------
+# Sail
+# ----------------------------
+/.lesshst
+/.composer/.htaccess
+/.composer/cache/.htaccess
+/.config/psysh/*
+/.gnupg
+/.vscode-server
+/.wakatime
+coverage.xml
+/.dotnet
+/git-cliff
+vite.config.js.*
+_ide_helper*.php
+.phpstorm.meta.php
+_ide_helper*
+.phpstorm.meta.php
+/database/*.sql
+/.nova
+/.claude
+results.xml
+
+# ignore all the ai configuration files, have laravel boost manage them and the developer choose their setup
+!.ai
+.agentic-tools-mcp
+.claude
+.codex
+.cursor
+.gemini
+.github/copilot-instructions.md
+.junie
+.mcp.json
+.opencode
+.vscode/mcp.json
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+boost.json
+opencode.json
