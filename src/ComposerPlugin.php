@@ -61,7 +61,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $filesToPublish = $this->discoverFiles($packageDir, $config['paths']);
         $stats = ['new' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'removed' => 0];
         $changedFiles = [];
-        $outputLines = [];
+
+        $this->writeBoxHeader($io);
 
         foreach ($filesToPublish as $relativePath => $sourceFile) {
             $destinationPath = $this->getDestinationPath($relativePath);
@@ -70,7 +71,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
             if (! file_exists($destinationFile)) {
                 $this->copyFile($sourceFile, $destinationFile);
-                $outputLines[] = ['type' => 'created', 'path' => $destinationPath];
+                $io->write($this->formatOutputLine(type: 'created', path: $destinationPath));
                 $stats['new']++;
                 $changedFiles[] = $destinationPath;
 
@@ -87,23 +88,28 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             }
 
             if (! in_array($localChecksum, $knownChecksums, true)) {
-                if (! $this->promptForLocallyModifiedFile($io, $destinationPath)) {
-                    $outputLines[] = ['type' => 'skipped', 'path' => $destinationPath];
-                    $stats['skipped']++;
+                $promptResult = $this->promptForLocallyModifiedFile($io, $destinationPath);
+
+                if ($promptResult === true) {
+                    $this->copyFile($sourceFile, $destinationFile);
+                    $io->write($this->formatOutputLine(type: 'updated', path: $destinationPath));
+                    $stats['updated']++;
+                    $changedFiles[] = $destinationPath;
 
                     continue;
                 }
 
-                $this->copyFile($sourceFile, $destinationFile);
-                $outputLines[] = ['type' => 'updated', 'path' => $destinationPath];
-                $stats['updated']++;
-                $changedFiles[] = $destinationPath;
+                if ($promptResult === null) {
+                    $io->write($this->formatOutputLine(type: 'skipped', path: $destinationPath));
+                }
+
+                $stats['skipped']++;
 
                 continue;
             }
 
             $this->copyFile($sourceFile, $destinationFile);
-            $outputLines[] = ['type' => 'updated', 'path' => $destinationPath];
+            $io->write($this->formatOutputLine(type: 'updated', path: $destinationPath));
             $stats['updated']++;
             $changedFiles[] = $destinationPath;
         }
@@ -111,7 +117,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $removedFiles = $this->removeOrphanedFiles($projectDir, $manifest, $filesToPublish);
 
         foreach ($removedFiles as $removedPath) {
-            $outputLines[] = ['type' => 'removed', 'path' => $removedPath];
+            $io->write($this->formatOutputLine(type: 'removed', path: $removedPath));
             $stats['removed']++;
             $changedFiles[] = $removedPath;
         }
@@ -123,24 +129,24 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         );
 
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $outputLines[] = ['type' => 'dep_added', 'path' => $package];
+            $io->write($this->formatOutputLine(type: 'dep_added', path: $package));
             $stats['new']++;
         }
 
         $stats['unchanged'] += count($dependencyResult['unchanged']);
 
         foreach ($dependencyResult['toRemove'] as $package) {
-            $outputLines[] = ['type' => 'dep_removed', 'path' => $package];
+            $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
             $stats['removed']++;
         }
 
-        $this->writeBox($io, $outputLines, $stats);
+        $this->writeBoxFooter($io, $stats);
         $this->runHooks($io, $config['hooks'], $changedFiles);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
 
-    private function writeBox(IOInterface $io, array $lines, array $stats): void
+    private function writeBoxHeader(IOInterface $io): void
     {
         $border = 'fg=gray';
 
@@ -148,10 +154,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->write("<{$border}>┌" . str_repeat('─', self::BOX_WIDTH - 2) . '┐</>');
         $io->write("<{$border}>│</>  <fg=cyan>Developer Settings</>" . str_repeat(' ', self::BOX_WIDTH - 24) . "  <{$border}>│</>");
         $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
+    }
 
-        foreach ($lines as $line) {
-            $io->write($this->formatOutputLine($line['type'], $line['path']));
-        }
+    private function writeBoxFooter(IOInterface $io, array $stats): void
+    {
+        $border = 'fg=gray';
 
         $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
 
@@ -426,14 +433,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return proc_close($process);
     }
 
-    private function promptForLocallyModifiedFile(IOInterface $io, string $path): bool
+    private function promptForLocallyModifiedFile(IOInterface $io, string $path): ?bool
     {
         if (! $io->isInteractive()) {
-            return false;
+            return null;
         }
 
         return $io->askConfirmation(
-            question: "  <fg=yellow>⚠ {$path} has been locally modified.</>\n  Discard local changes? [y/<options=bold>N</>] ",
+            question: "<fg=gray>│</>  <fg=yellow>⚠</>  {$path} — discard local changes? [y/<options=bold>N</>] ",
             default: false,
         );
     }
