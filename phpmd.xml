@@ -36,8 +36,10 @@
         </properties>
     </rule>
 
-    <rule ref="rulesets/unusedcode.xml" />
-
+    <rule ref="rulesets/unusedcode.xml">
+        <exclude name="UnusedFormalParameter" />
+    </rule>
+    
     <exclude-pattern>vendor/</exclude-pattern>
     <exclude-pattern>storage/</exclude-pattern>
     <exclude-pattern>bootstrap/cache/</exclude-pattern>
