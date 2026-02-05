@@ -10,14 +10,20 @@ use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
+use Laravel\Prompts\Prompt;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+
+use function Laravel\Prompts\info;
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\multiselect;
+use function Laravel\Prompts\outro;
+use function Laravel\Prompts\table;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
     private const PACKAGE_NAME = 'mikebronner/development-settings';
     private const MANIFEST_FILE = 'manifest.json';
-    private const BOX_WIDTH = 80;
 
     private static bool $dependenciesInjected = false;
     private IOInterface $io;
@@ -59,10 +65,117 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $config = require $packageDir . '/config/developer-settings.php';
 
         $filesToPublish = $this->discoverFiles($packageDir, $config['paths']);
-        $stats = ['new' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'removed' => 0];
-        $changedFiles = [];
 
-        $this->writeBoxHeader($io);
+        $scan = $this->scanFiles($projectDir, $filesToPublish, $manifest);
+        $orphans = $this->findOrphanedFiles($projectDir, $manifest, $filesToPublish);
+
+        $composerConfig = $config['composer'] ?? [];
+        $dependencyResult = $this->prepareComposerDependencies(
+            install: $composerConfig['install'] ?? [],
+            remove: $composerConfig['remove'] ?? [],
+        );
+
+        Prompt::interactive($io->isInteractive());
+
+        intro('Developer Settings');
+
+        $tableRows = $this->buildTableRows($scan, $orphans, $dependencyResult);
+
+        if ($tableRows !== []) {
+            table(
+                headers: ['File', 'Status'],
+                rows: $tableRows,
+            );
+        }
+
+        $filesToOverwrite = [];
+
+        if ($scan['modified'] !== []) {
+            $filesToOverwrite = multiselect(
+                label: 'Overwrite locally modified files?',
+                options: array_combine(
+                    array_keys($scan['modified']),
+                    array_keys($scan['modified']),
+                ),
+                default: [],
+                required: false,
+                hint: 'Space to toggle, Enter to confirm.',
+            );
+        }
+
+        $changedFiles = [];
+        $stats = [
+            'new' => 0,
+            'updated' => 0,
+            'unchanged' => count($scan['unchanged']),
+            'skipped' => 0,
+            'removed' => 0,
+        ];
+
+        foreach ($scan['new'] as $path => $sourceFile) {
+            $this->copyFile($sourceFile, $projectDir . '/' . $path);
+            $changedFiles[] = $path;
+            $stats['new']++;
+        }
+
+        foreach ($scan['updatable'] as $path => $sourceFile) {
+            $this->copyFile($sourceFile, $projectDir . '/' . $path);
+            $changedFiles[] = $path;
+            $stats['updated']++;
+        }
+
+        foreach ($scan['modified'] as $path => $sourceFile) {
+            if (in_array($path, $filesToOverwrite, true)) {
+                $this->copyFile($sourceFile, $projectDir . '/' . $path);
+                $changedFiles[] = $path;
+                $stats['updated']++;
+
+                continue;
+            }
+
+            $stats['skipped']++;
+        }
+
+        foreach ($orphans as $orphanPath) {
+            $filePath = $projectDir . '/' . $orphanPath;
+            unlink($filePath);
+            $this->removeEmptyDirectories(dirname($filePath), $projectDir);
+            $changedFiles[] = $orphanPath;
+            $stats['removed']++;
+        }
+
+        foreach (array_keys($dependencyResult['toInstall']) as $package) {
+            $stats['new']++;
+        }
+
+        $stats['unchanged'] += count($dependencyResult['unchanged']);
+
+        foreach ($dependencyResult['toRemove'] as $package) {
+            $stats['removed']++;
+        }
+
+        info($this->buildSummary($stats));
+
+        $this->runHooks($io, $config['hooks'], $changedFiles);
+        $this->installDevDependencies($io, $dependencyResult['toInstall']);
+        $this->removeDevDependencies($io, $dependencyResult['toRemove']);
+
+        outro('Done');
+    }
+
+    /**
+     * @param array<string, string> $filesToPublish
+     * @param array<string, array<int, string>> $manifest
+     * @return array{new: array<string, string>, unchanged: array<string, string>, modified: array<string, string>, updatable: array<string, string>}
+     */
+    private function scanFiles(string $projectDir, array $filesToPublish, array $manifest): array
+    {
+        $scan = [
+            'new' => [],
+            'unchanged' => [],
+            'modified' => [],
+            'updatable' => [],
+        ];
 
         foreach ($filesToPublish as $relativePath => $sourceFile) {
             $destinationPath = $this->getDestinationPath($relativePath);
@@ -70,10 +183,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $knownChecksums = $manifest[$destinationPath] ?? [];
 
             if (! file_exists($destinationFile)) {
-                $this->copyFile($sourceFile, $destinationFile);
-                $io->write($this->formatOutputLine(type: 'created', path: $destinationPath));
-                $stats['new']++;
-                $changedFiles[] = $destinationPath;
+                $scan['new'][$destinationPath] = $sourceFile;
 
                 continue;
             }
@@ -82,146 +192,99 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $sourceChecksum = md5_file($sourceFile);
 
             if ($localChecksum === $sourceChecksum) {
-                $stats['unchanged']++;
+                $scan['unchanged'][$destinationPath] = $sourceFile;
 
                 continue;
             }
 
             if (! in_array($localChecksum, $knownChecksums, true)) {
-                if ($this->promptForLocallyModifiedFile($io, $destinationPath)) {
-                    $this->copyFile($sourceFile, $destinationFile);
-                    $io->write($this->formatOutputLine(type: 'updated', path: $destinationPath));
-                    $stats['updated']++;
-                    $changedFiles[] = $destinationPath;
-
-                    continue;
-                }
-
-                $io->write($this->formatOutputLine(type: 'skipped', path: $destinationPath));
-                $stats['skipped']++;
+                $scan['modified'][$destinationPath] = $sourceFile;
 
                 continue;
             }
 
-            $this->copyFile($sourceFile, $destinationFile);
-            $io->write($this->formatOutputLine(type: 'updated', path: $destinationPath));
-            $stats['updated']++;
-            $changedFiles[] = $destinationPath;
+            $scan['updatable'][$destinationPath] = $sourceFile;
         }
 
-        $removedFiles = $this->removeOrphanedFiles($projectDir, $manifest, $filesToPublish);
+        return $scan;
+    }
 
-        foreach ($removedFiles as $removedPath) {
-            $io->write($this->formatOutputLine(type: 'removed', path: $removedPath));
-            $stats['removed']++;
-            $changedFiles[] = $removedPath;
+    private function findOrphanedFiles(string $projectDir, array $manifest, array $discoveredFiles): array
+    {
+        $orphaned = [];
+        $discoveredPaths = array_keys($discoveredFiles);
+
+        foreach (array_keys($manifest) as $manifestPath) {
+            if (in_array($manifestPath, $discoveredPaths, true)) {
+                continue;
+            }
+
+            if (! file_exists($projectDir . '/' . $manifestPath)) {
+                continue;
+            }
+
+            $orphaned[] = $manifestPath;
         }
 
-        $composerConfig = $config['composer'] ?? [];
-        $dependencyResult = $this->prepareComposerDependencies(
-            install: $composerConfig['install'] ?? [],
-            remove: $composerConfig['remove'] ?? [],
-        );
+        return $orphaned;
+    }
+
+    private function buildTableRows(array $scan, array $orphans, array $dependencyResult): array
+    {
+        $rows = [];
+
+        foreach (array_keys($scan['new']) as $path) {
+            $rows[] = [$path, '+ new'];
+        }
+
+        foreach (array_keys($scan['updatable']) as $path) {
+            $rows[] = [$path, '↻ updated'];
+        }
+
+        foreach (array_keys($scan['modified']) as $path) {
+            $rows[] = [$path, '⚠ locally modified'];
+        }
+
+        foreach ($orphans as $path) {
+            $rows[] = [$path, '- removed'];
+        }
 
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_added', path: $package));
-            $stats['new']++;
+            $rows[] = ["{$package} (composer)", '+ new'];
         }
-
-        $stats['unchanged'] += count($dependencyResult['unchanged']);
 
         foreach ($dependencyResult['toRemove'] as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
-            $stats['removed']++;
+            $rows[] = ["{$package} (composer)", '- removed'];
         }
 
-        $this->writeBoxFooter($io, $stats);
-        $this->runHooks($io, $config['hooks'], $changedFiles);
-        $this->installDevDependencies($io, $dependencyResult['toInstall']);
-        $this->removeDevDependencies($io, $dependencyResult['toRemove']);
+        return $rows;
     }
 
-    private function writeBoxHeader(IOInterface $io): void
+    private function buildSummary(array $stats): string
     {
-        $border = 'fg=gray';
+        $parts = [];
 
-        $io->write('');
-        $io->write("<{$border}>┌" . str_repeat('─', self::BOX_WIDTH - 2) . '┐</>');
-        $io->write("<{$border}>│</>  <fg=cyan>Developer Settings</>" . str_repeat(' ', self::BOX_WIDTH - 24) . "  <{$border}>│</>");
-        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
-    }
-
-    private function writeBoxFooter(IOInterface $io, array $stats): void
-    {
-        $border = 'fg=gray';
-
-        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
-
-        $summaryParts = [
-            $this->formatSummaryItem($stats['new'], 'new', 'green'),
-            $this->formatSummaryItem($stats['updated'], 'updated', 'yellow'),
-            $this->formatSummaryItem($stats['unchanged'], 'unchanged', 'gray', 'white'),
-            $this->formatSummaryItem($stats['skipped'], 'skipped', 'red'),
-            $this->formatSummaryItem($stats['removed'], 'removed', 'magenta'),
-        ];
-
-        $summary = implode(' · ', $summaryParts);
-        $summaryPlain = preg_replace('/<[^>]+>/', '', $summary);
-        $padding = self::BOX_WIDTH - 6 - mb_strlen($summaryPlain);
-        $io->write("<{$border}>│</>  " . $summary . str_repeat(' ', $padding) . "  <{$border}>│</>");
-
-        $io->write("<{$border}>└" . str_repeat('─', self::BOX_WIDTH - 2) . '┘</>');
-        $io->write('');
-    }
-
-    private function formatSummaryItem(int $count, string $label, string $bgColor, ?string $fgColor = null): string
-    {
-        if ($count === 0) {
-            return "<fg=gray>{$count} {$label}</>";
+        if ($stats['new'] > 0) {
+            $parts[] = "{$stats['new']} new";
         }
 
-        $fgColor ??= "bright-{$bgColor}";
-
-        return "<fg={$fgColor};bg={$bgColor}> {$count} {$label} </>";
-    }
-
-    private function formatOutputLine(string $type, string $path): string
-    {
-        $formats = [
-            'created' => ['icon' => '+', 'style' => 'info'],
-            'updated' => ['icon' => '↻', 'style' => 'comment'],
-            'unchanged' => ['icon' => '=', 'style' => null],
-            'skipped' => ['icon' => '○', 'style' => 'fg=red'],
-            'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
-            'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
-            'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
-            'dep_updated' => ['icon' => '↻', 'style' => 'comment', 'suffix' => ' (composer)'],
-            'dep_unchanged' => ['icon' => '=', 'style' => null, 'suffix' => ' (composer)'],
-        ];
-
-        $format = $formats[$type] ?? ['icon' => ' ', 'style' => null, 'suffix' => ''];
-        $style = $format['style'] ?? null;
-        $prefix = $style !== null
-            ? "<{$style}>{$format['icon']}</{$style}>"
-            : $format['icon'];
-        $suffix = $format['suffix'] ?? '';
-
-        $displayPath = match ($type) {
-            'skipped' => "{$path} (locally modified)",
-            default => $path . $suffix,
-        };
-
-        $prefixLength = 1;
-        $maxPathLength = self::BOX_WIDTH - 6 - $prefixLength - 2 - 1;
-
-        if (strlen($displayPath) > $maxPathLength) {
-            $displayPath = substr($displayPath, 0, $maxPathLength - 3) . '...';
+        if ($stats['updated'] > 0) {
+            $parts[] = "{$stats['updated']} updated";
         }
 
-        $visibleLength = $prefixLength + 2 + strlen($displayPath);
-        $padding = max(1, self::BOX_WIDTH - 6 - $visibleLength);
+        if ($stats['unchanged'] > 0) {
+            $parts[] = "{$stats['unchanged']} unchanged";
+        }
 
-        return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
+        if ($stats['skipped'] > 0) {
+            $parts[] = "{$stats['skipped']} skipped";
+        }
+
+        if ($stats['removed'] > 0) {
+            $parts[] = "{$stats['removed']} removed";
+        }
+
+        return implode(' · ', $parts);
     }
 
     private function prepareComposerDependencies(array $install, array $remove): array
@@ -306,30 +369,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $io->write('');
-    }
-
-    private function removeOrphanedFiles(string $projectDir, array $manifest, array $discoveredFiles): array
-    {
-        $removed = [];
-        $discoveredPaths = array_keys($discoveredFiles);
-
-        foreach (array_keys($manifest) as $manifestPath) {
-            if (in_array($manifestPath, $discoveredPaths, true)) {
-                continue;
-            }
-
-            $filePath = $projectDir . '/' . $manifestPath;
-
-            if (! file_exists($filePath)) {
-                continue;
-            }
-
-            unlink($filePath);
-            $this->removeEmptyDirectories(dirname($filePath), $projectDir);
-            $removed[] = $manifestPath;
-        }
-
-        return $removed;
     }
 
     private function removeEmptyDirectories(string $directory, string $stopAt): void
@@ -426,22 +465,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         fclose($pipes[2]);
 
         return proc_close($process);
-    }
-
-    private function promptForLocallyModifiedFile(IOInterface $io, string $path): bool
-    {
-        if (! $io->isInteractive()) {
-            return false;
-        }
-
-        $result = $io->askConfirmation(
-            question: "<fg=gray>│</>  <fg=yellow>⚠</>  {$path} — discard local changes? [y/<options=bold>N</>] ",
-            default: false,
-        );
-
-        $io->write("\033[1A\033[2K", newline: false);
-
-        return $result;
     }
 
     private function getPackageDir(): ?string

@@ -14,7 +14,8 @@
     ],
     "require": {
         "php": "^8.4",
-        "composer-plugin-api": "^2.0"
+        "composer-plugin-api": "^2.0",
+        "laravel/prompts": "^0.3"
     },
     "require-dev": {
         "laravel/boost": "^2.0",
