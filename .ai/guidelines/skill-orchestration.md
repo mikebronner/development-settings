@@ -17,21 +17,6 @@
 
 You MUST spawn sub-agents BEFORE attempting the task yourself.
 
-**NEVER** do this:
-```
-User: "Evaluate these files for redundancy"
-Assistant: [reads files and analyzes alone]
-```
-
-**ALWAYS** do this:
-```
-User: "Evaluate these files for redundancy"
-Assistant: "I'll spawn research-analyst agents to analyze these in parallel."
-[spawns Task sub-agents]
-```
-
-**FAILING TO SPAWN WHEN REQUIRED REDUCES OUTPUT QUALITY. ALWAYS LEVERAGE EXPERTISE.**
-
 ---
 
 ## Core Principle
@@ -55,22 +40,6 @@ Assistant: "I'll spawn research-analyst agents to analyze these in parallel."
 | architecture, design, scalability | `architect-reviewer` |
 | payments, transactions, financial | `fintech-engineer` |
 
----
-
-## When to Spawn Sub-Agents
-
-Spawn when ANY of these conditions apply:
-
-| Condition | Example |
-|-----------|---------|
-| Task requires deep domain expertise | Database schema changes → `database-administrator` |
-| Task spans multiple domains | Payment refactor → `fintech-engineer` + `refactoring-specialist` |
-| User mentions a domain keyword | "security", "test", "performance", "review" |
-| Task involves risk | Production data, authentication, financial logic |
-| Analysis would benefit from focused isolation | Code review, architecture assessment |
-| Meta-discussion requires research | Evaluating options → `research-analyst` |
-| Information retrieval needed | Finding patterns → `search-specialist` |
-
 ### Do NOT Spawn When
 
 - Task is trivial (single-line fix, typo correction)
@@ -80,60 +49,6 @@ Spawn when ANY of these conditions apply:
 
 ---
 
-## Spawning Pattern
-
-Use the Task tool:
-
-```
-Task(
-  subagent_type: "general-purpose",
-  prompt: """
-  You are operating as the {skill-name} specialist.
-
-  {Insert full skill content from .ai/skills/{skill-name}/SKILL.md}
-
-  ## Your Task
-  {Specific task description with file paths and context}
-
-  ## Expected Output
-  {What findings/recommendations to return}
-
-  ## Constraints
-  - Research only, do not modify files
-  - Return actionable recommendations
-  - Flag any concerns or risks
-  """
-)
-```
-
-### Parallel vs Sequential
-
-| Scenario | Approach |
-|----------|----------|
-| Independent analyses | Parallel — spawn simultaneously |
-| Dependent workflow | Sequential — wait for prior results |
-| Research for decision-making | Parallel — gather options quickly |
-
----
-
-## Result Synthesis
-
-After sub-agents complete:
-
-1. **Consolidate** — Merge findings into unified summary
-2. **Reconcile** — Resolve conflicts (prefer safety)
-3. **Prioritize** — Order by severity/impact
-4. **Present** — Show user clear options with trade-offs
-5. **Wait** — Do not proceed with file changes until approved
-
----
-
 ## Transparency
 
-Always inform the user when spawning:
-
-> "I'll spawn the `code-reviewer` and `security-auditor` agents to analyze this in parallel."
-
-After completion:
-
-> "The code-reviewer found 3 issues. The security-auditor flagged 1 concern. Here's the consolidated analysis..."
+Always inform the user when spawning sub-agents and summarize findings when complete.

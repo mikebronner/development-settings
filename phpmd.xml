@@ -8,7 +8,7 @@
 >
 
     <description>
-        Custom PHPMD ruleset.
+        Custom PHPMD ruleset for the project with static access rule excluded
     </description>
 
     <rule ref="rulesets/cleancode.xml">
@@ -36,9 +36,7 @@
         </properties>
     </rule>
 
-    <rule ref="rulesets/unusedcode.xml">
-        <exclude name="UnusedFormalParameter" />
-    </rule>
+    <rule ref="rulesets/unusedcode.xml" />
 
     <exclude-pattern>vendor/</exclude-pattern>
     <exclude-pattern>storage/</exclude-pattern>
