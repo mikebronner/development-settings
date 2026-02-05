@@ -14,16 +14,13 @@ use Laravel\Prompts\Prompt;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
-use function Laravel\Prompts\info;
-use function Laravel\Prompts\intro;
 use function Laravel\Prompts\multiselect;
-use function Laravel\Prompts\outro;
-use function Laravel\Prompts\table;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
     private const PACKAGE_NAME = 'mikebronner/development-settings';
     private const MANIFEST_FILE = 'manifest.json';
+    private const BOX_WIDTH = 80;
 
     private static bool $dependenciesInjected = false;
     private IOInterface $io;
@@ -75,22 +72,37 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             remove: $composerConfig['remove'] ?? [],
         );
 
-        Prompt::interactive($io->isInteractive());
+        $this->writeBoxHeader($io);
 
-        intro('Developer Settings');
+        foreach (array_keys($scan['new']) as $path) {
+            $io->write($this->formatOutputLine(type: 'created', path: $path));
+        }
 
-        $tableRows = $this->buildTableRows($scan, $orphans, $dependencyResult);
+        foreach (array_keys($scan['updatable']) as $path) {
+            $io->write($this->formatOutputLine(type: 'updated', path: $path));
+        }
 
-        if ($tableRows !== []) {
-            table(
-                headers: ['File', 'Status'],
-                rows: $tableRows,
-            );
+        foreach (array_keys($scan['modified']) as $path) {
+            $io->write($this->formatOutputLine(type: 'modified', path: $path));
+        }
+
+        foreach ($orphans as $path) {
+            $io->write($this->formatOutputLine(type: 'removed', path: $path));
+        }
+
+        foreach (array_keys($dependencyResult['toInstall']) as $package) {
+            $io->write($this->formatOutputLine(type: 'dep_added', path: $package));
+        }
+
+        foreach ($dependencyResult['toRemove'] as $package) {
+            $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
         }
 
         $filesToOverwrite = [];
 
         if ($scan['modified'] !== []) {
+            Prompt::interactive($io->isInteractive());
+
             $filesToOverwrite = multiselect(
                 label: 'Overwrite locally modified files?',
                 options: array_combine(
@@ -154,13 +166,90 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $stats['removed']++;
         }
 
-        info($this->buildSummary($stats));
-
+        $this->writeBoxFooter($io, $stats);
         $this->runHooks($io, $config['hooks'], $changedFiles);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
+    }
 
-        outro('Done');
+    private function writeBoxHeader(IOInterface $io): void
+    {
+        $border = 'fg=gray';
+
+        $io->write('');
+        $io->write("<{$border}>┌" . str_repeat('─', self::BOX_WIDTH - 2) . '┐</>');
+        $io->write("<{$border}>│</>  <fg=cyan>Developer Settings</>" . str_repeat(' ', self::BOX_WIDTH - 24) . "  <{$border}>│</>");
+        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
+    }
+
+    private function writeBoxFooter(IOInterface $io, array $stats): void
+    {
+        $border = 'fg=gray';
+
+        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
+
+        $summaryParts = [
+            $this->formatSummaryItem($stats['new'], 'new', 'green'),
+            $this->formatSummaryItem($stats['updated'], 'updated', 'yellow'),
+            $this->formatSummaryItem($stats['unchanged'], 'unchanged', 'gray', 'white'),
+            $this->formatSummaryItem($stats['skipped'], 'skipped', 'red'),
+            $this->formatSummaryItem($stats['removed'], 'removed', 'magenta'),
+        ];
+
+        $summary = implode(' · ', $summaryParts);
+        $summaryPlain = preg_replace('/<[^>]+>/', '', $summary);
+        $padding = self::BOX_WIDTH - 6 - mb_strlen($summaryPlain);
+        $io->write("<{$border}>│</>  " . $summary . str_repeat(' ', $padding) . "  <{$border}>│</>");
+
+        $io->write("<{$border}>└" . str_repeat('─', self::BOX_WIDTH - 2) . '┘</>');
+        $io->write('');
+    }
+
+    private function formatSummaryItem(int $count, string $label, string $bgColor, ?string $fgColor = null): string
+    {
+        if ($count === 0) {
+            return "<fg=gray>{$count} {$label}</>";
+        }
+
+        $fgColor ??= "bright-{$bgColor}";
+
+        return "<fg={$fgColor};bg={$bgColor}> {$count} {$label} </>";
+    }
+
+    private function formatOutputLine(string $type, string $path): string
+    {
+        $formats = [
+            'created' => ['icon' => '+', 'style' => 'info'],
+            'updated' => ['icon' => '↻', 'style' => 'comment'],
+            'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
+            'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
+            'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
+        ];
+
+        $format = $formats[$type] ?? ['icon' => ' ', 'style' => null, 'suffix' => ''];
+        $style = $format['style'] ?? null;
+        $prefix = $style !== null
+            ? "<{$style}>{$format['icon']}</{$style}>"
+            : $format['icon'];
+        $suffix = $format['suffix'] ?? '';
+
+        $displayPath = match ($type) {
+            'modified' => "{$path} (locally modified)",
+            default => $path . $suffix,
+        };
+
+        $prefixLength = 1;
+        $maxPathLength = self::BOX_WIDTH - 6 - $prefixLength - 2 - 1;
+
+        if (strlen($displayPath) > $maxPathLength) {
+            $displayPath = substr($displayPath, 0, $maxPathLength - 3) . '...';
+        }
+
+        $visibleLength = $prefixLength + 2 + strlen($displayPath);
+        $padding = max(1, self::BOX_WIDTH - 6 - $visibleLength);
+
+        return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
     }
 
     /**
@@ -227,64 +316,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         return $orphaned;
-    }
-
-    private function buildTableRows(array $scan, array $orphans, array $dependencyResult): array
-    {
-        $rows = [];
-
-        foreach (array_keys($scan['new']) as $path) {
-            $rows[] = [$path, '+ new'];
-        }
-
-        foreach (array_keys($scan['updatable']) as $path) {
-            $rows[] = [$path, '↻ updated'];
-        }
-
-        foreach (array_keys($scan['modified']) as $path) {
-            $rows[] = [$path, '⚠ locally modified'];
-        }
-
-        foreach ($orphans as $path) {
-            $rows[] = [$path, '- removed'];
-        }
-
-        foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $rows[] = ["{$package} (composer)", '+ new'];
-        }
-
-        foreach ($dependencyResult['toRemove'] as $package) {
-            $rows[] = ["{$package} (composer)", '- removed'];
-        }
-
-        return $rows;
-    }
-
-    private function buildSummary(array $stats): string
-    {
-        $parts = [];
-
-        if ($stats['new'] > 0) {
-            $parts[] = "{$stats['new']} new";
-        }
-
-        if ($stats['updated'] > 0) {
-            $parts[] = "{$stats['updated']} updated";
-        }
-
-        if ($stats['unchanged'] > 0) {
-            $parts[] = "{$stats['unchanged']} unchanged";
-        }
-
-        if ($stats['skipped'] > 0) {
-            $parts[] = "{$stats['skipped']} skipped";
-        }
-
-        if ($stats['removed'] > 0) {
-            $parts[] = "{$stats['removed']} removed";
-        }
-
-        return implode(' · ', $parts);
     }
 
     private function prepareComposerDependencies(array $install, array $remove): array
