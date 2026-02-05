@@ -88,9 +88,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             }
 
             if (! in_array($localChecksum, $knownChecksums, true)) {
-                $promptResult = $this->promptForLocallyModifiedFile($io, $destinationPath);
-
-                if ($promptResult === true) {
+                if ($this->promptForLocallyModifiedFile($io, $destinationPath)) {
                     $this->copyFile($sourceFile, $destinationFile);
                     $io->write($this->formatOutputLine(type: 'updated', path: $destinationPath));
                     $stats['updated']++;
@@ -99,10 +97,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                     continue;
                 }
 
-                if ($promptResult === null) {
-                    $io->write($this->formatOutputLine(type: 'skipped', path: $destinationPath));
-                }
-
+                $io->write($this->formatOutputLine(type: 'skipped', path: $destinationPath));
                 $stats['skipped']++;
 
                 continue;
@@ -433,16 +428,20 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return proc_close($process);
     }
 
-    private function promptForLocallyModifiedFile(IOInterface $io, string $path): ?bool
+    private function promptForLocallyModifiedFile(IOInterface $io, string $path): bool
     {
         if (! $io->isInteractive()) {
-            return null;
+            return false;
         }
 
-        return $io->askConfirmation(
+        $result = $io->askConfirmation(
             question: "<fg=gray>│</>  <fg=yellow>⚠</>  {$path} — discard local changes? [y/<options=bold>N</>] ",
             default: false,
         );
+
+        $io->write("\033[1A\033[2K", newline: false);
+
+        return $result;
     }
 
     private function getPackageDir(): ?string
