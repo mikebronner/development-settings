@@ -26,10 +26,7 @@
     ".github/workflows/sync-developer-settings.yml": [
         "3ed155007d03bc3370ac7471f527e794"
     ],
-    ".php-codesniffer/mikebronner/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
-        "927b4c76c15b2280ae54fc540f11c8ac"
-    ],
-    ".php-codesniffer/mikebronner/ruleset.xml": [
+    ".php-codesniffer/MikeBronner/ruleset.xml": [
         "197d2a3197508ea8e581f9c36cd21bda"
     ],
     ".pre-commit-config.yaml": [
