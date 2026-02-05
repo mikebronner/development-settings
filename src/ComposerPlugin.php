@@ -87,8 +87,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             }
 
             if (! in_array($localChecksum, $knownChecksums, true)) {
-                $outputLines[] = ['type' => 'skipped', 'path' => $destinationPath];
-                $stats['skipped']++;
+                if (! $this->promptForLocallyModifiedFile($io, $destinationPath)) {
+                    $outputLines[] = ['type' => 'skipped', 'path' => $destinationPath];
+                    $stats['skipped']++;
+
+                    continue;
+                }
+
+                $this->copyFile($sourceFile, $destinationFile);
+                $outputLines[] = ['type' => 'updated', 'path' => $destinationPath];
+                $stats['updated']++;
+                $changedFiles[] = $destinationPath;
 
                 continue;
             }
@@ -415,6 +424,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         fclose($pipes[2]);
 
         return proc_close($process);
+    }
+
+    private function promptForLocallyModifiedFile(IOInterface $io, string $path): bool
+    {
+        if (! $io->isInteractive()) {
+            return false;
+        }
+
+        return $io->askConfirmation(
+            question: "  <fg=yellow>⚠ {$path} has been locally modified.</>\n  Discard local changes? [y/<options=bold>N</>] ",
+            default: false,
+        );
     }
 
     private function getPackageDir(): ?string
