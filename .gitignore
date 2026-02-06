@@ -87,6 +87,7 @@ _ide_helper*.php
 .cursor
 .gemini
 .github/copilot-instructions.md
+.github/skills
 .junie
 .mcp.json
 .opencode
