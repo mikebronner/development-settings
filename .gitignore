@@ -77,7 +77,7 @@ tmplaravel*
 _ide_helper*.php
 .cursorrules
 /vendor/laravel-ide/*
-
+/phpstan
 
 # ignore all the ai configuration files, have laravel boost manage them and the developer choose their setup
 !.ai
