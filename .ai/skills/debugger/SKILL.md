@@ -106,19 +106,25 @@ php artisan tinker
 ### Using Laravel Boost Tools
 
 ```bash
+
 # Get last error from application
+
 mcp__laravel-boost__last-error
 
 # Read recent log entries
+
 mcp__laravel-boost__read-log-entries(entries: 50)
 
 # Read browser logs for frontend issues
+
 mcp__laravel-boost__browser-logs(entries: 20)
 
 # Execute diagnostic code
+
 mcp__laravel-boost__tinker(code: "User::find(1)->toArray()")
 
 # Query database directly
+
 mcp__laravel-boost__database-query(query: "SELECT * FROM leads WHERE created_at > NOW() - INTERVAL 1 HOUR")
 ```
 
@@ -231,16 +237,21 @@ When one error triggers others:
 ### Non-Intrusive Techniques
 
 ```bash
+
 # Check application logs
+
 tail -f storage/logs/laravel.log
 
 # Monitor queue workers
+
 php artisan horizon:status
 
 # Check database connections
+
 mysql -e "SHOW PROCESSLIST"
 
 # Monitor memory usage
+
 php -r "echo memory_get_usage(true);"
 ```
 
@@ -333,9 +344,11 @@ After resolving, implement prevention:
 ## Postmortem Template
 
 ```markdown
+
 ## Incident: [Title]
 
 ### Timeline
+
 - [Time]: First error detected
 - [Time]: Investigation started
 - [Time]: Root cause identified
@@ -343,23 +356,28 @@ After resolving, implement prevention:
 - [Time]: Verified resolved
 
 ### Root Cause
+
 [Clear explanation of what caused the issue]
 
 ### Impact
+
 - Duration: X hours
 - Users affected: X
 - Data impact: [None/Description]
 
 ### Resolution
+
 [What was done to fix it]
 
 ### Prevention
+
 - [ ] Test added
 - [ ] Monitoring added
 - [ ] Documentation updated
 - [ ] Process improved
 
 ### Lessons Learned
+
 [What we'll do differently]
 ```
 
